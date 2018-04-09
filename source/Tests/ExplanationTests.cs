@@ -7,19 +7,21 @@ using SharpLab.Tests.Internal;
 
 namespace SharpLab.Tests {
     public class ExplanationTests {
-        [Fact]
-        public async Task SlowUpdate_ExplainsExpressionBodiedProperties() {
+        [Theory]
+        // space at the end is expected -- currently extra spaces are trimmed by JS
+        [InlineData("expression-bodied member", "class C { int P => 1; }", "int P => 1; ")]
+        [InlineData("pattern matching", "class C { void M() { switch(1) { case int i: break; } } }", "case int i")]
+        public async Task SlowUpdate_ExplainsCSharpFeature(string name, string providedCode, string expectedCode) {
             var driver = await NewTestDriverAsync();
-            driver.SetText("class C { int P => 1; }");
+            driver.SetText(providedCode);
 
             var result = await driver.SendSlowUpdateAsync<ExplanationData[]>();
 
             var explanation = Assert.Single(result.ExtensionResult);
-            // space at the end is expected -- currently extra spaces are trimmed by JS
-            Assert.Equal("int P => 1; ", explanation.Code);
-            Assert.Equal("expression-bodied member", explanation.Name);
+            Assert.Equal(expectedCode, explanation.Code);
+            Assert.Equal(name, explanation.Name);
             Assert.NotEmpty(explanation.Text);
-            Assert.Equal("https://docs.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-6#expression-bodied-function-members", explanation.Link);
+            Assert.StartsWith("https://docs.microsoft.com", explanation.Link);
         }
 
         private static async Task<MirrorSharpTestDriver> NewTestDriverAsync() {
