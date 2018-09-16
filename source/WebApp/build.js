@@ -51,7 +51,7 @@ task('less', async () => {
             outputSourceFiles: true
         }
     });
-    result = await postcss([autoprefixer, cssnano()]).process(result.css, {
+    result = await postcss([autoprefixer/*, cssnano()*/]).process(result.css, {
         from: paths.from.less,
         map: {
             inline: false,
@@ -70,7 +70,7 @@ task('js', async () => {
         input: paths.from.js,
         plugins: [
             rollupPluginCommonJS({
-                include: ['node_modules/**', 'js/ui/codemirror/**', 'js/ui/helpers/**']
+                include: ['node_modules/**', 'js/ui/codemirror/**', 'js/ui/helpers/**' ]
             }),
             {
                 name: 'rollup-plugin-adhoc-resolve-vue',
@@ -80,6 +80,7 @@ task('js', async () => {
             ...(production ? [rollupPluginTerser()] : [])
         ]
     });
+
     await bundle.write({
         format: 'iife',
         file: paths.to.js,
@@ -136,7 +137,8 @@ task('html', async () => {
     ]
 });
 
-task('default', () => {
+task('default', async () => {
+    await tasks._DEBUG();
     const htmlAll = async () => {
         await parallel(tasks.less(), tasks.js());
         await tasks.html();
@@ -147,6 +149,35 @@ task('default', () => {
         htmlAll()
     );
 });
+
+task('_DEBUG', async () => {
+    await jetpack.copyAsync(
+        'd:/Development/JavaScript/codemirror-addon-infotip/dist',
+        'd:/Development/VS 2017/SharpLab/source/WebApp/node_modules/codemirror-addon-infotip/dist',
+        { overwrite: true }
+    );
+
+    await jetpack.copyAsync(
+        'd:/Development/VS 2017/MirrorSharp/WebAssets/dist/mirrorsharp.js',
+        'd:/Development/VS 2017/SharpLab/source/WebApp/node_modules/mirrorsharp/mirrorsharp.js',
+        { overwrite: true }
+    );
+
+    await jetpack.copyAsync(
+        'd:/Development/VS 2017/MirrorSharp/WebAssets/dist/mirrorsharp.css',
+        'd:/Development/VS 2017/SharpLab/source/WebApp/node_modules/mirrorsharp/mirrorsharp.css',
+        { overwrite: true }
+    );
+
+    await jetpack.copyAsync(
+        'd:/Development/VS 2017/MirrorSharp/WebAssets/dist/mirrorsharp.less',
+        'd:/Development/VS 2017/SharpLab/source/WebApp/node_modules/mirrorsharp/mirrorsharp.less',
+        { overwrite: true }
+    );
+}, { inputs: [
+    'd:/Development/JavaScript/codemirror-addon-infotip/dist/*.*',
+    'd:/Development/VS 2017/MirrorSharp/WebAssets/dist/*.*',
+] });
 
 async function getRoslynVersion() {
     const assetsJson = JSON.parse(await jetpack.readAsync('../Server/obj/project.assets.json'));
