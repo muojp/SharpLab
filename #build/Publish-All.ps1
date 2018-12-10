@@ -118,8 +118,8 @@ try {
         Write-Output ''
         Write-Output "*** $_"
 
-        $siteRoslynArtifactsRoot = Resolve-Path "$roslynArtifactsRoot/$($_.Name)"
-        $branchInfo = ConvertFrom-Json ([IO.File]::ReadAllText("$siteRoslynArtifactsRoot/BranchInfo.json"))
+        $siteRoslynArtifactsRoot = Resolve-Path "$roslynArtifactsRoot\$($_.Name)"
+        $branchInfo = ConvertFrom-Json ([IO.File]::ReadAllText("$siteRoslynArtifactsRoot\BranchInfo.json"))
 
         $webAppName = "sl-b-$($branchFsName.ToLowerInvariant())"
         if ($webAppName.Length -gt 60) {
@@ -144,7 +144,7 @@ try {
 
     $branchesFileName = "!branches.json"
     Write-Output "Updating $branchesFileName..."
-    Set-Content "$sitesRoot\$branchesFileName" $(ConvertTo-Json $branchesJson -Depth 100)
+    Set-Content "$sitesRoot\$branchesFileName" -Encoding Byte ([Text.Encoding]::UTF8.GetBytes($(ConvertTo-Json $branchesJson -Depth 100)))
 
     $brachesJsLocalRoot = "$sourceRoot\WebApp\wwwroot"
     if (!(Test-Path $brachesJsLocalRoot)) {
