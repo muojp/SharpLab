@@ -27,9 +27,3 @@ function Invoke-Git(
         Pop-Location
     }
 }
-
-$VisualStudioPath = (Get-ItemProperty HKLM:\SOFTWARE\wow6432node\Microsoft\VisualStudio\SxS\VS7)."15.0"
-if (!$VisualStudioPath) {
-    Write-Error "Failed to find Visual Studio 2017 (buuild currently uses it for MSBuild path)."
-}
-$global:MSBuild = $VisualStudioPath + 'MSBuild\15.0\Bin\MSBuild.exe'

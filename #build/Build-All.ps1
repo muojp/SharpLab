@@ -80,34 +80,6 @@ try {
     ${env:$HOME} = $PSScriptRoot
     Invoke-Git . --version
 
-    Write-Output "Building SharpLab..."
-    Write-Output "  Restoring packages..."
-    dotnet restore "$sourceRoot\SharpLab.sln"
-    Write-Output "  Server.Azure.csproj"
-    dotnet build "$sourceRoot\Server.Azure\Server.Azure.csproj" `
-        /p:AllowedReferenceRelatedFileExtensions=.pdb `
-        /p:UnbreakablePolicyReportEnabled=false `
-        /p:Configuration=Release
-    if ($LastExitCode -ne 0) {
-        Write-Error "SharpLab build failed."
-    }
-
-    Write-Output "Building AssemblyResolver..."
-    $assemblyResolverSln = "$PSScriptRoot\#tools\AssemblyResolver\AssemblyResolver.sln"
-    Write-Output "  Restoring packages..."
-    &"$PSScriptRoot\#tools\nuget" restore $assemblyResolverSln
-    &$MSBuild $assemblyResolverSln /p:Configuration=Debug
-    if ($LastExitCode -ne 0) {
-        Write-Error "AssemblyResolver build failed."
-    }
-    $assemblyResolver = Resolve-Path "$PSScriptRoot\#tools\AssemblyResolver\bin\Debug\AssemblyResolver.exe"
-
-    $failedListPath = "$sitesRoot\!failed.txt"
-    if (Test-Path $failedListPath) {
-        Write-Output "Deleting $failedListPath..."
-        Remove-Item $failedListPath
-    }
-
     $buildConfig.RoslynRepositories | % {
         Write-Output "Building repository '$($_.Name)' ($($_.Url))..."
         $repositorySourceRoot = Ensure-ResolvedPath "$roslynSourcesRoot\$($_.Name)"
@@ -140,7 +112,6 @@ try {
                 return
             }
 
-            $Host.UI.RawUI.WindowTitle = "SharpLab Build: $_"
             $branchFsName = $repositoryName + "-" + ($_ -replace '[/\\:_]', '-')
 
             $siteRoot            = Ensure-ResolvedPath "$sitesRoot\$branchFsName"
@@ -148,24 +119,18 @@ try {
 
             $branchBuildFailed = $false
             try {
-                &$BuildRoslynBranchIfModified `
-                    -SourceRoot $repositorySourceRoot `
-                    -BranchName $_ `
-                    -ArtifactsRoot $branchArtifactsRoot `
-                    -IfBuilt {
-                        Write-Output "Getting branch info..."
-                        $branchInfo = @{
-                            name       = $_
-                            repository = $repositoryConfig.Name
-                            commits = @(@{
-                                hash    =  (Invoke-Git $repositorySourceRoot log "$_" -n 1 --pretty=format:"%H" )
-                                date    =  (Invoke-Git $repositorySourceRoot log "$_" -n 1 --pretty=format:"%aI")
-                                author  =  (Invoke-Git $repositorySourceRoot log "$_" -n 1 --pretty=format:"%aN")
-                                message = @(Invoke-Git $repositorySourceRoot log "$_" -n 1 --pretty=format:"%B" ) -join "`r`n"
-                            })
-                        }
-                        Set-Content "$branchArtifactsRoot\BranchInfo.json" (ConvertTo-Json $branchInfo -Depth 100)
-                    }
+                Write-Output "Getting branch info..."
+                $branchInfo = @{
+                    name       = $_
+                    repository = $repositoryConfig.Name
+                    commits = @(@{
+                        hash    =  (Invoke-Git $repositorySourceRoot log "origin/$_" -n 1 --pretty=format:"%H" )
+                        date    =  (Invoke-Git $repositorySourceRoot log "origin/$_" -n 1 --pretty=format:"%aI")
+                        author  =  (Invoke-Git $repositorySourceRoot log "origin/$_" -n 1 --pretty=format:"%aN")
+                        message = @(Invoke-Git $repositorySourceRoot log "origin/$_" -n 1 --pretty=format:"%B" ) -join "`r`n"
+                    })
+                }
+                Set-Content "$branchArtifactsRoot\BranchInfo.json" (ConvertTo-Json $branchInfo -Depth 100)
             }
             catch {
                 $ex = $_.Exception
@@ -179,37 +144,6 @@ try {
             }
 
             $branchBinariesPath = "$branchArtifactsRoot\Binaries"
-            if (!(Test-Path $branchBinariesPath)) {
-                Write-Warning "No binaries available, skipping further steps."
-                if (!$branchBuildFailed) {
-                    Add-Content $failedListPath @("$branchFsName ($repositoryName)", "No binaries found under $branchBinariesPath.", '')
-                }
-                return;
-            }
-
-            Write-Output "Copying Server\Web.config to $siteRoot\Web.config..."
-            Copy-Item "$sourceRoot\Server\Web.config" "$siteRoot\Web.config" -Force
-
-            Write-Output "Resolving and copying assemblies..."
-            $resolverLogPath = "$branchArtifactsRoot\AssemblyResolver.log"
-            $resolverCommand = "&'$assemblyResolver'" +
-              " --source-bin '$sourceRoot\Server.Azure\bin\Release' " +
-              " --roslyn-bin '$branchBinariesPath'" +
-              " --target '$(Ensure-ResolvedPath $siteRoot\bin)'" +
-              " --target-app-config '$siteRoot\Web.config'" +
-              " >> '$resolverLogPath'"
-            $resolverCommand | Out-File $resolverLogPath -Encoding 'Unicode'
-            Invoke-Expression $resolverCommand
-            if ($LastExitCode -ne 0) {
-                Write-Warning "AssemblyResolver failed with code $LastExitCode, see $resolverLogPath."
-                return
-            }
-            if (!$branchBuildFailed) {
-                Write-Success "All done, looks OK."
-            }
-            else {
-                Write-Warning "Branch build failed: using previous version."
-            }
         }
     }
 }

@@ -97,10 +97,6 @@ try {
     $sitesRoot = Resolve-Path "$PSScriptRoot\..\!sites"
     Write-Output "  Sites Root:            $sitesRoot"
 
-    &"$PSScriptRoot\#tools\nuget" install ftpush -Pre -OutputDirectory "$sourceRoot\!tools"
-    $ftpushExe = @(Get-Item "$sourceRoot\!tools\ftpush*\tools\ftpush.exe")[0].FullName
-    Write-Output "  ftpush.exe:            $ftpushExe"
-
     Write-Output "Getting Roslyn feature map..."
     $roslynBranchFeatureMap = Get-RoslynBranchFeatureMap -ArtifactsRoot $roslynArtifactsRoot
 
@@ -118,15 +114,12 @@ try {
         $branchFsName = $_.Name
 
         $siteRoot = $_.FullName
-        if (!(Get-ChildItem $siteRoot\bin -Recurse | ? { $_ -is [IO.FileInfo] })) {
-            return
-        }
 
         Write-Output ''
         Write-Output "*** $_"
 
-        $siteRoslynArtifactsRoot = Resolve-Path "$roslynArtifactsRoot\$($_.Name)"
-        $branchInfo = ConvertFrom-Json ([IO.File]::ReadAllText("$siteRoslynArtifactsRoot\BranchInfo.json"))
+        $siteRoslynArtifactsRoot = Resolve-Path "$roslynArtifactsRoot/$($_.Name)"
+        $branchInfo = ConvertFrom-Json ([IO.File]::ReadAllText("$siteRoslynArtifactsRoot/BranchInfo.json"))
 
         $webAppName = "sl-b-$($branchFsName.ToLowerInvariant())"
         if ($webAppName.Length -gt 60) {
@@ -134,56 +127,11 @@ try {
              Write-Output "[WARNING] Name is too long, using '$webAppName'."
         }
 
-        $iisSiteName = "$webAppName.sharplab.local"
-        $url = "http://$iisSiteName"
-        &$PublishToIIS -SiteName $iisSiteName -SourcePath $siteRoot
-
-        if ($azure) {
-            &$PublishToAzure `
-                -FtpushExe $ftpushExe `
-                -ResourceGroupName $($azureConfig.ResourceGroupName) `
-                -AppServicePlanName $($azureConfig.AppServicePlanName) `
-                -WebAppName $webAppName `
-                -CanCreateWebApp `
-                -CanStopWebApp `
-                -SourcePath $siteRoot `
-                -TargetPath "."
-            $url = "https://$($webAppName).azurewebsites.net"
-        }
-
-        Write-Host "GET $url/status"
-        $ok = $false
-        $tryPermanent = 1
-        $tryTemporary = 1
-        while ($tryPermanent -le 3 -and $tryTemporary -le 30) {
-            try {
-                Invoke-RestMethod "$url/status"
-                $ok = $true
-                break
-            }
-            catch {
-                $ex = $_.Exception
-                $temporary = ($ex -is [Net.WebException] -and $ex.Response -and $ex.Response.StatusCode -eq 503)
-                if ($temporary) {
-                    $tryTemporary += 1
-                }
-                else {
-                    $tryPermanent += 1
-                }
-                Write-Warning ($ex.Message)
-            }
-            Start-Sleep -Seconds 1
-        }
-        if (!$ok) {
-            return
-        }
-
         # Success!
         $branchJson = [ordered]@{
             id = $branchFsName -replace '^dotnet-',''
             name = $branchInfo.name
             group = $branchInfo.repository
-            url = $url
             feature = $roslynBranchFeatureMap[$branchInfo.name]
             commits = $branchInfo.commits
         }
